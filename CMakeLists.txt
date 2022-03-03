@@ -1,6 +1,8 @@
 project( fc )
 cmake_minimum_required( VERSION 3.8 )
 
+# Add libff 
+
 SET( DEFAULT_HEADER_INSTALL_DIR usr/include/${target} )
 SET( DEFAULT_LIBRARY_INSTALL_DIR usr/lib )
 SET( DEFAULT_EXECUTABLE_INSTALL_DIR usr/bin )
