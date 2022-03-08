@@ -1,7 +1,6 @@
 project( fc )
 cmake_minimum_required( VERSION 3.8 )
 
-# Add libff 
 
 SET( DEFAULT_HEADER_INSTALL_DIR usr/include/${target} )
 SET( DEFAULT_LIBRARY_INSTALL_DIR usr/lib )
@@ -28,6 +27,7 @@ elseif(NOT CMAKE_CXX_STANDARD)
 endif()
 
 add_subdirectory( secp256k1 )
+add_subdirectory( libraries/ff )
 
 IF( ECC_IMPL STREQUAL openssl )
   SET( ECC_REST src/crypto/elliptic_impl_pub.cpp )
