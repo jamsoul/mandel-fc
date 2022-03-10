@@ -104,6 +104,7 @@ set( fc_sources
      src/crypto/public_key.cpp
      src/crypto/private_key.cpp
      src/crypto/signature.cpp
+     src/crypto/snark.cpp
      src/network/ip.cpp
      src/network/platform_root_ca.cpp
      src/network/resolve.cpp
@@ -171,6 +172,7 @@ target_include_directories(fc
   PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${OPENSSL_INCLUDE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/vendor/websocketpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/libraries/ff
   )
 
 # try and make this very clear that this json parser is intended only for webauthn parsing..
