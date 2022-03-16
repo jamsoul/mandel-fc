@@ -14,6 +14,12 @@ namespace fc { namespace snark {
 
     using u256 =  boost::multiprecision::number<boost::multiprecision::cpp_int_backend<256, 256, boost::multiprecision::unsigned_magnitude, boost::multiprecision::unchecked, void>>;
 
+    /// Concatenate the contents of a container onto a vector
+    template <class T, class U> std::vector<T> operator+(std::vector<T> _a, U const& _b)
+    {
+        return _a += _b;
+    }
+
     class h256 {
     public:
         enum ConstructFromHashType { AlignLeft, AlignRight, FailIfDifferent };
@@ -31,14 +37,13 @@ namespace fc { namespace snark {
         byte* data() { return m_data.data(); }
         /// @returns a constant byte pointer to the object's data.
         byte const* data() const { return m_data.data(); }
-    /// @returns a copy of the object's data as a byte vector.
+        /// @returns a copy of the object's data as a byte vector.
         bytes asBytes() const { return bytes(data(), data() + 32); }
 
         h256() { m_data.fill(0); }
 
 
     };
-
 
     void initLibSnark() noexcept {
         static bool s_initialized = []() noexcept {
@@ -88,18 +93,21 @@ namespace fc { namespace snark {
         if (x == libff::alt_bn128_Fq::zero() && y == libff::alt_bn128_Fq::zero())
             return libff::alt_bn128_G1::zero();
         libff::alt_bn128_G1 p(x, y, libff::alt_bn128_Fq::one());
-        if (!p.is_well_formed())
-            BOOST_THROW_EXCEPTION(InvalidEncoding());
+     //   if (!p.is_well_formed())
+       //     BOOST_THROW_EXCEPTION(InvalidEncoding());
         return p;
     }
+
 
     bytes encodePointG1(libff::alt_bn128_G1 _p) {
         if (_p.is_zero())
             return bytes(64, 0);
         _p.to_affine_coordinates();
-        return
-            fromLibsnarkBigint(_p.X.as_bigint()).asBytes() +
-            fromLibsnarkBigint(_p.Y.as_bigint()).asBytes();
+        
+        auto retValue = fromLibsnarkBigint(_p.X.as_bigint()).asBytes();
+        auto retValue2 = fromLibsnarkBigint(_p.Y.as_bigint()).asBytes();
+        retValue.insert( retValue.end(), retValue2.begin(), retValue2.end());
+        return retValue;            
     }
 
     libff::alt_bn128_Fq2 decodeFq2Element(bytesConstRef _data) {
@@ -117,12 +125,10 @@ namespace fc { namespace snark {
         if (x == libff::alt_bn128_Fq2::zero() && y == libff::alt_bn128_Fq2::zero())
             return libff::alt_bn128_G2::zero();
         libff::alt_bn128_G2 p(x, y, libff::alt_bn128_Fq2::one());
-        if (!p.is_well_formed())
-            BOOST_THROW_EXCEPTION(InvalidEncoding());
+        //if (!p.is_well_formed())
+          //  BOOST_THROW_EXCEPTION(InvalidEncoding());
         return p;
     }
-
-
 
     std::pair<bool, bytes> alt_bn128_pair(bytesConstRef _in) {
         size_t constexpr pairSize = 2 * 32 + 2 * 64;
@@ -167,10 +173,9 @@ namespace fc { namespace snark {
     }
 
     std::pair<bool, bytes> alt_bn128_mul(bytesConstRef _in) {
-        std::pair<bool, bytes> retValue;
-        retValue.first = true;
-        retValue.second = { 'a' };
-        return retValue;
-    }
+		initLibSnark();
+		libff::alt_bn128_G1 const p = decodePointG1(_in.cropped(0));
+		libff::alt_bn128_G1 const result = toLibsnarkBigint(h256(_in.cropped(64), h256::AlignLeft)) * p;
+		return {true, encodePointG1(result)};    }
 
 } }
