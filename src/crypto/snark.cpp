@@ -5,12 +5,77 @@
 #include <libff/algebra/curves/alt_bn128/alt_bn128_pairing.hpp>
 #include <libff/algebra/curves/alt_bn128/alt_bn128_pp.hpp>
 #include <libff/common/profiling.hpp>
-#include <boost/multiprecision/cpp_int.hpp>
 #include <boost/throw_exception.hpp>
 
 
 
 namespace fc { namespace snark {
+
+    void initLibSnark() noexcept {
+        static bool s_initialized = []() noexcept {
+            libff::inhibit_profiling_info = true;
+            libff::inhibit_profiling_counters = true;
+            libff::alt_bn128_pp::init_public_params();
+            return true;
+        }();
+        (void)s_initialized;
+    }
+
+    int32_t alt_bn128_pair(fc_span _g1_pairs, fc_span _g2_pairs, bool *result ) {
+
+    }
+    
+    int32_t alt_bn128_add(fc_span _op1, fc_span _op2, fc_span* result) {
+
+    }
+
+    int32_t alt_bn128_mul(fc_span _g1_point, fc_span _scalar, fc_span* result) {
+
+    }
+
+
+/*
+
+    libff::alt_bn128_G1 decodePointG1(bytesConstRef _data) {
+        libff::alt_bn128_Fq x = decodeFqElement(_data.cropped(0));
+        libff::alt_bn128_Fq y = decodeFqElement(_data.cropped(32));
+        if (x == libff::alt_bn128_Fq::zero() && y == libff::alt_bn128_Fq::zero())
+            return libff::alt_bn128_G1::zero();
+        libff::alt_bn128_G1 p(x, y, libff::alt_bn128_Fq::one());
+     //   if (!p.is_well_formed())
+       //     BOOST_THROW_EXCEPTION(InvalidEncoding());
+        return p;
+    }
+
+    h256 fromLibsnarkBigint(libff::bigint<libff::alt_bn128_q_limbs> const& _b) {
+        static size_t const N = static_cast<size_t>(_b.N);
+        static size_t const L = sizeof(_b.data[0]);
+        static_assert(sizeof(mp_limb_t) == L, "Unexpected limb size in libff::bigint.");
+        h256 x;
+        for (size_t i = 0; i < N; i++)
+            for (size_t j = 0; j < L; j++)
+                x[i * L + j] = uint8_t(_b.data[N - 1 - i] >> (8 * (L - 1 - j)));
+        return x;
+    }
+
+    bytes encodePointG1(libff::alt_bn128_G1 _p) {
+        if (_p.is_zero())
+            return bytes(64, 0);
+        _p.to_affine_coordinates();
+        
+        auto retValue = fromLibsnarkBigint(_p.X.as_bigint()).asBytes();
+        auto retValue2 = fromLibsnarkBigint(_p.Y.as_bigint()).asBytes();
+        retValue.insert( retValue.end(), retValue2.begin(), retValue2.end());
+        return retValue;            
+    }
+
+
+    void alt_bn128_add(bytesConstRef _in) {
+        initLibSnark();
+        libff::alt_bn128_G1 const p1 = decodePointG1(_in);
+        libff::alt_bn128_G1 const p2 = decodePointG1(_in.cropped(32 * 2));
+        return {true, encodePointG1(p1 + p2)};
+    }
 
     using u256 =  boost::multiprecision::number<boost::multiprecision::cpp_int_backend<256, 256, boost::multiprecision::unsigned_magnitude, boost::multiprecision::unchecked, void>>;
 
@@ -45,15 +110,6 @@ namespace fc { namespace snark {
 
     };
 
-    void initLibSnark() noexcept {
-        static bool s_initialized = []() noexcept {
-            libff::inhibit_profiling_info = true;
-            libff::inhibit_profiling_counters = true;
-            libff::alt_bn128_pp::init_public_params();
-            return true;
-        }();
-        (void)s_initialized;
-    }
 
     libff::bigint<libff::alt_bn128_q_limbs> toLibsnarkBigint(h256 const& _x) {
         libff::bigint<libff::alt_bn128_q_limbs> b;
@@ -130,52 +186,6 @@ namespace fc { namespace snark {
         return p;
     }
 
-    std::pair<bool, bytes> alt_bn128_pair(bytesConstRef _in) {
-        size_t constexpr pairSize = 2 * 32 + 2 * 64;
-        size_t const pairs = _in.size() / pairSize;
-        if (pairs * pairSize != _in.size()) // Invalid length.
-            return {false, bytes{}};
-
-        initLibSnark();
-        libff::alt_bn128_Fq12 x = libff::alt_bn128_Fq12::one();
-        for (size_t i = 0; i < pairs; ++i) {
-            bytesConstRef const pair = _in.cropped(i * pairSize, pairSize);
-            libff::alt_bn128_G1 const g1 = decodePointG1(pair);
-            libff::alt_bn128_G2 const p = decodePointG2(pair.cropped(2 * 32));
-            if (-libff::alt_bn128_G2::scalar_field::one() * p + p != libff::alt_bn128_G2::zero())
-                // p is not an element of the group (has wrong order)
-                return {false, bytes()};
-            if (p.is_zero() || g1.is_zero())
-                continue; // the pairing is one
-            x = x * libff::alt_bn128_miller_loop(
-                libff::alt_bn128_precompute_G1(g1),
-                libff::alt_bn128_precompute_G2(p)
-            );
-        }
-
-        bool const result = libff::alt_bn128_final_exponentiation(x) == libff::alt_bn128_GT::one();
-
-        std::pair<bool, bytes> retValue;
-        return retValue;
-    }
-
-    std::pair<bool, bytes> alt_bn128_add(bytesConstRef _in) {
-    /*  
-        std::pair<bool, bytes> retValue;
-        retValue.first = true;
-        retValue.second = { 'a' };
-        return retValue;
-    */
-        initLibSnark();
-        libff::alt_bn128_G1 const p1 = decodePointG1(_in);
-        libff::alt_bn128_G1 const p2 = decodePointG1(_in.cropped(32 * 2));
-        return {true, encodePointG1(p1 + p2)};
-    }
-
-    std::pair<bool, bytes> alt_bn128_mul(bytesConstRef _in) {
-		initLibSnark();
-		libff::alt_bn128_G1 const p = decodePointG1(_in.cropped(0));
-		libff::alt_bn128_G1 const result = toLibsnarkBigint(h256(_in.cropped(64), h256::AlignLeft)) * p;
-		return {true, encodePointG1(result)};    }
-
-} }
+*/
+} 
+}
