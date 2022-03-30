@@ -16,7 +16,7 @@ namespace fc { namespace snark {
             libff::inhibit_profiling_info = true;
             libff::inhibit_profiling_counters = true;
             libff::alt_bn128_pp::init_public_params();
-            return true;
+            return true; 
         }();
         (void)s_initialized;
     }

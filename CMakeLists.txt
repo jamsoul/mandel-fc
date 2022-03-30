@@ -194,7 +194,7 @@ IF(APPLE)
   find_library(security_framework Security)
   find_library(corefoundation_framework CoreFoundation)
 ENDIF()
-target_link_libraries( fc PUBLIC ${LINK_USR_LOCAL_LIB}
+target_link_libraries( fc PUBLIC ff ${LINK_USR_LOCAL_LIB}
                                  Boost::date_time Boost::filesystem Boost::chrono Boost::iostreams Threads::Threads
                                  ${OPENSSL_LIBRARIES} ${ZLIB_LIBRARIES} ${PLATFORM_SPECIFIC_LIBS} ${RPCRT4} ${CMAKE_DL_LIBS} ${readline_libraries} ${ECC_LIB} ${security_framework} ${corefoundation_framework} )
 
