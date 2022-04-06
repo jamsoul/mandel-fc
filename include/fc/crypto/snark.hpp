@@ -6,10 +6,17 @@
 #include <utility>
 #include <vector>
 
-namespace fc { namespace snark {
-    using fc_span = std::vector<uint8_t>;
+#include <libff/algebra/curves/alt_bn128/alt_bn128_g1.hpp>
+#include <libff/algebra/curves/alt_bn128/alt_bn128_g2.hpp>
 
-    int32_t alt_bn128_pair(fc_span _g1_pairs, fc_span _g2_pairs, bool *result );
-    int32_t alt_bn128_add(fc_span _op1, fc_span _op2, fc_span* result);
-    int32_t alt_bn128_mul(fc_span _g1_point, fc_span _scalar, fc_span* result);
+namespace fc { namespace snark {
+   using bytes = std::vector<char>;
+   using Scalar = libff::bigint<libff::alt_bn128_q_limbs>;
+
+    
+    std::pair<int32_t, bytes> alt_bn128_add(bytes _op1, bytes _op2); 
+    std::pair<int32_t, bytes> alt_bn128_mul(bytes _g1_point, bytes _scalar);
+        
+    //std::pair<int32_t, bool>  alt_bn128_pair(bytes _g1_pairs, bytes _g2_pairs);
+
 }}

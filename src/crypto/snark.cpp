@@ -7,8 +7,6 @@
 #include <libff/common/profiling.hpp>
 #include <boost/throw_exception.hpp>
 
-
-
 namespace fc { namespace snark {
 
     void initLibSnark() noexcept {
@@ -21,171 +19,160 @@ namespace fc { namespace snark {
         (void)s_initialized;
     }
 
-    int32_t alt_bn128_pair(fc_span _g1_pairs, fc_span _g2_pairs, bool *result ) {
+    Scalar to_scalar(bytes be) noexcept {
+        mpz_t m;
+        mpz_init(m);
+        mpz_import(m, be.size(), /*order=*/1, /*size=*/1, /*endian=*/0, /*nails=*/0, &be[0]);
+        Scalar out{m};
+        mpz_clear(m);
+        return out;
+    }
 
+    // Notation warning: Yellow Paper's p is the same libff's q.
+    // Returns x < p (YP notation).
+    static bool valid_element_of_fp(const Scalar& x) noexcept {
+        return mpn_cmp(x.data, libff::alt_bn128_modulus_q.data, libff::alt_bn128_q_limbs) < 0;
+    }
+
+    std::pair<int32_t, libff::alt_bn128_G1> decode_g1_element(bytes bytes64_be) noexcept {
+        assert(bytes64_be.size() == 64);
+
+        bytes sub1(bytes64_be.begin(), bytes64_be.begin()+32);
+        bytes sub2(bytes64_be.begin()+32, bytes64_be.begin()+64);
+
+        Scalar x{to_scalar(sub1)};
+        if (!valid_element_of_fp(x)) {
+            return std::make_pair(1, libff::alt_bn128_G1::zero());
+        }
+
+        Scalar y{to_scalar(sub2)};
+        if (!valid_element_of_fp(y)) {
+            return std::make_pair(1, libff::alt_bn128_G1::zero());
+        }
+
+        if (x.is_zero() && y.is_zero()) {
+            return std::make_pair(1, libff::alt_bn128_G1::zero());
+        }
+
+        libff::alt_bn128_G1 point{x, y, libff::alt_bn128_Fq::one()};
+        if (!point.is_well_formed()) {
+            return std::make_pair(1, libff::alt_bn128_G1::zero());
+        }
+        return std::make_pair(0, point);
+    }
+
+    std::pair<int32_t, libff::alt_bn128_Fq2> decode_fp2_element(bytes bytes64_be) noexcept {
+        assert(bytes64_be.size() == 64);
+
+       // big-endian encoding
+        bytes sub1(bytes64_be.begin()+32, bytes64_be.begin()+64);
+        bytes sub2(bytes64_be.begin(), bytes64_be.begin()+32);        
+
+        Scalar c0{to_scalar(sub1)};
+        Scalar c1{to_scalar(sub2)};
+
+        if (!valid_element_of_fp(c0) || !valid_element_of_fp(c1)) {
+            return {};
+        }
+
+        return std::make_pair(0, libff::alt_bn128_Fq2{c0, c1});
+    }
+
+    std::pair<int32_t, libff::alt_bn128_G2> decode_g2_element(bytes bytes128_be) noexcept {
+        assert(bytes128_be.size() == 128);
+
+        bytes sub1(bytes128_be.begin(), bytes128_be.begin()+64);        
+        auto x = decode_fp2_element(sub1);
+        if (x.first) {
+            return std::make_pair(1, libff::alt_bn128_G2::zero());
+        }
+
+        bytes sub2(bytes128_be.begin()+64, bytes128_be.begin()+128);        
+        auto y = decode_fp2_element(sub2);
+        
+        if (y.first) {
+            return std::make_pair(1, libff::alt_bn128_G2::zero());
+        }
+
+        if (x.second.is_zero() && y.second.is_zero()) {
+            return std::make_pair(0, libff::alt_bn128_G2::zero());
+        }
+
+        libff::alt_bn128_G2 point{x.second, y.second, libff::alt_bn128_Fq2::one()};
+        if (!point.is_well_formed()) {
+            return std::make_pair(1, libff::alt_bn128_G2::zero());;
+        }
+
+        if (!(libff::alt_bn128_G2::order() * point).is_zero()) {
+            // wrong order, doesn't belong to the subgroup G2
+            return std::make_pair(1, libff::alt_bn128_G2::zero());;
+        }
+
+        return std::make_pair(0, point);
+    }
+
+    bytes encode_g1_element(libff::alt_bn128_G1 p) noexcept {
+        bytes out(64, '\0');
+        if (p.is_zero()) {
+            return out;
+        }
+
+        p.to_affine_coordinates();
+
+        auto x{p.X.as_bigint()};
+        auto y{p.Y.as_bigint()};
+
+//        // Here we convert little-endian data to big-endian output
+//        static_assert(SILKWORM_BYTE_ORDER == SILKWORM_LITTLE_ENDIAN);
+//        static_assert(sizeof(x.data) == 32);
+
+        std::memcpy(&out[0], y.data, 32);
+        std::memcpy(&out[32], x.data, 32);
+
+//        std::reverse(out.begin(), out.end());
+        return out;
+    }
+
+    std::pair<int32_t, bytes> alt_bn128_add(bytes _op1, bytes _op2) {
+        bytes buffer;
+
+        snark::initLibSnark();
+
+        auto x = snark::decode_g1_element(_op1);
+
+        if (x.first) {
+            return std::make_pair(1, buffer);
+        }
+
+        auto y = snark::decode_g1_element(_op2);
+
+        if (y.first) {
+            return std::make_pair(1, buffer);
+        }
+
+        libff::alt_bn128_G1 g1Sum = x.second + y.second;
+        auto retEncoded = snark::encode_g1_element(g1Sum);
+        return std::make_pair(0, retEncoded);
+    }
+
+    std::pair<int32_t, bytes> alt_bn128_mul(bytes _g1_point, bytes _scalar) {
+        bytes buffer;
+
+        snark::initLibSnark();
+
+        auto x = snark::decode_g1_element(_g1_point);
+
+        if (x.first) {
+            return std::make_pair(1, buffer);
+        }
+
+        snark::Scalar n{snark::to_scalar(_scalar)};
+
+        libff::alt_bn128_G1 g1Product = n * x.second;
+        auto retEncoded = snark::encode_g1_element(g1Product);
+        return std::make_pair(0, retEncoded);
     }
     
-    int32_t alt_bn128_add(fc_span _op1, fc_span _op2, fc_span* result) {
-
-    }
-
-    int32_t alt_bn128_mul(fc_span _g1_point, fc_span _scalar, fc_span* result) {
-
-    }
-
-
-/*
-
-    libff::alt_bn128_G1 decodePointG1(bytesConstRef _data) {
-        libff::alt_bn128_Fq x = decodeFqElement(_data.cropped(0));
-        libff::alt_bn128_Fq y = decodeFqElement(_data.cropped(32));
-        if (x == libff::alt_bn128_Fq::zero() && y == libff::alt_bn128_Fq::zero())
-            return libff::alt_bn128_G1::zero();
-        libff::alt_bn128_G1 p(x, y, libff::alt_bn128_Fq::one());
-     //   if (!p.is_well_formed())
-       //     BOOST_THROW_EXCEPTION(InvalidEncoding());
-        return p;
-    }
-
-    h256 fromLibsnarkBigint(libff::bigint<libff::alt_bn128_q_limbs> const& _b) {
-        static size_t const N = static_cast<size_t>(_b.N);
-        static size_t const L = sizeof(_b.data[0]);
-        static_assert(sizeof(mp_limb_t) == L, "Unexpected limb size in libff::bigint.");
-        h256 x;
-        for (size_t i = 0; i < N; i++)
-            for (size_t j = 0; j < L; j++)
-                x[i * L + j] = uint8_t(_b.data[N - 1 - i] >> (8 * (L - 1 - j)));
-        return x;
-    }
-
-    bytes encodePointG1(libff::alt_bn128_G1 _p) {
-        if (_p.is_zero())
-            return bytes(64, 0);
-        _p.to_affine_coordinates();
-        
-        auto retValue = fromLibsnarkBigint(_p.X.as_bigint()).asBytes();
-        auto retValue2 = fromLibsnarkBigint(_p.Y.as_bigint()).asBytes();
-        retValue.insert( retValue.end(), retValue2.begin(), retValue2.end());
-        return retValue;            
-    }
-
-
-    void alt_bn128_add(bytesConstRef _in) {
-        initLibSnark();
-        libff::alt_bn128_G1 const p1 = decodePointG1(_in);
-        libff::alt_bn128_G1 const p2 = decodePointG1(_in.cropped(32 * 2));
-        return {true, encodePointG1(p1 + p2)};
-    }
-
-    using u256 =  boost::multiprecision::number<boost::multiprecision::cpp_int_backend<256, 256, boost::multiprecision::unsigned_magnitude, boost::multiprecision::unchecked, void>>;
-
-    /// Concatenate the contents of a container onto a vector
-    template <class T, class U> std::vector<T> operator+(std::vector<T> _a, U const& _b)
-    {
-        return _a += _b;
-    }
-
-    class h256 {
-    public:
-        enum ConstructFromHashType { AlignLeft, AlignRight, FailIfDifferent };
-
-        std::array<byte, 32> m_data;
-        // @returns a particular byte from the hash.
-        byte& operator[](unsigned _i) { return m_data[_i]; }
-        // @returns a particular byte from the hash.
-        byte operator[](unsigned _i) const { return m_data[_i]; }
-        /// Explicitly construct, copying from a byte array.
-        explicit h256(bytes const& _b, ConstructFromHashType _t = FailIfDifferent) { if (_b.size() == 32) memcpy(m_data.data(), _b.data(), std::min<unsigned>(_b.size(), 32)); else { m_data.fill(0); if (_t != FailIfDifferent) { auto c = std::min<unsigned>(_b.size(), 32); for (unsigned i = 0; i < c; ++i) m_data[_t == AlignRight ? 32 - 1 - i : i] = _b[_t == AlignRight ? _b.size() - 1 - i : i]; } } }
-        /// Explicitly construct, copying from a byte array.
-        explicit h256(bytesConstRef _b, ConstructFromHashType _t = FailIfDifferent) { if (_b.size() == 32) memcpy(m_data.data(), _b.data(), std::min<unsigned>(_b.size(), 32)); else { m_data.fill(0); if (_t != FailIfDifferent) { auto c = std::min<unsigned>(_b.size(), 32); for (unsigned i = 0; i < c; ++i) m_data[_t == AlignRight ? 32 - 1 - i : i] = _b[_t == AlignRight ? _b.size() - 1 - i : i]; } } }
-        /// @returns a mutable byte pointer to the object's data.
-        byte* data() { return m_data.data(); }
-        /// @returns a constant byte pointer to the object's data.
-        byte const* data() const { return m_data.data(); }
-        /// @returns a copy of the object's data as a byte vector.
-        bytes asBytes() const { return bytes(data(), data() + 32); }
-
-        h256() { m_data.fill(0); }
-
-
-    };
-
-
-    libff::bigint<libff::alt_bn128_q_limbs> toLibsnarkBigint(h256 const& _x) {
-        libff::bigint<libff::alt_bn128_q_limbs> b;
-        auto const N = b.N;
-        constexpr size_t L = sizeof(b.data[0]);
-        static_assert(sizeof(mp_limb_t) == L, "Unexpected limb size in libff::bigint.");
-        for (size_t i = 0; i < N; i++)
-            for (size_t j = 0; j < L; j++)
-                b.data[N - 1 - i] |= mp_limb_t(_x[i * L + j]) << (8 * (L - 1 - j));
-        return b;
-    }
-
-    h256 fromLibsnarkBigint(libff::bigint<libff::alt_bn128_q_limbs> const& _b) {
-        static size_t const N = static_cast<size_t>(_b.N);
-        static size_t const L = sizeof(_b.data[0]);
-        static_assert(sizeof(mp_limb_t) == L, "Unexpected limb size in libff::bigint.");
-        h256 x;
-        for (size_t i = 0; i < N; i++)
-            for (size_t j = 0; j < L; j++)
-                x[i * L + j] = uint8_t(_b.data[N - 1 - i] >> (8 * (L - 1 - j)));
-        return x;
-    }
-
-    libff::alt_bn128_Fq decodeFqElement(bytesConstRef _data) {
-        // h256::AlignLeft ensures that the h256 is zero-filled on the right if _data
-        // is too short.
-        h256 xbin(_data, h256::AlignLeft);
-        // TODO: Consider using a compiler time constant for comparison.
-     //   if (u256(xbin) >= u256(fromLibsnarkBigint(libff::alt_bn128_Fq::mod)))
-     //       BOOST_THROW_EXCEPTION(InvalidEncoding());
-        return toLibsnarkBigint(xbin);
-    }
-
-    libff::alt_bn128_G1 decodePointG1(bytesConstRef _data) {
-        libff::alt_bn128_Fq x = decodeFqElement(_data.cropped(0));
-        libff::alt_bn128_Fq y = decodeFqElement(_data.cropped(32));
-        if (x == libff::alt_bn128_Fq::zero() && y == libff::alt_bn128_Fq::zero())
-            return libff::alt_bn128_G1::zero();
-        libff::alt_bn128_G1 p(x, y, libff::alt_bn128_Fq::one());
-     //   if (!p.is_well_formed())
-       //     BOOST_THROW_EXCEPTION(InvalidEncoding());
-        return p;
-    }
-
-
-    bytes encodePointG1(libff::alt_bn128_G1 _p) {
-        if (_p.is_zero())
-            return bytes(64, 0);
-        _p.to_affine_coordinates();
-        
-        auto retValue = fromLibsnarkBigint(_p.X.as_bigint()).asBytes();
-        auto retValue2 = fromLibsnarkBigint(_p.Y.as_bigint()).asBytes();
-        retValue.insert( retValue.end(), retValue2.begin(), retValue2.end());
-        return retValue;            
-    }
-
-    libff::alt_bn128_Fq2 decodeFq2Element(bytesConstRef _data) {
-        // Encoding: c1 (256 bits) c0 (256 bits)
-        // "Big endian", just like the numbers
-        return libff::alt_bn128_Fq2(
-            decodeFqElement(_data.cropped(32)),
-            decodeFqElement(_data.cropped(0))
-        );
-    }
-
-    libff::alt_bn128_G2 decodePointG2(bytesConstRef _data) {
-        libff::alt_bn128_Fq2 const x = decodeFq2Element(_data);
-        libff::alt_bn128_Fq2 const y = decodeFq2Element(_data.cropped(64));
-        if (x == libff::alt_bn128_Fq2::zero() && y == libff::alt_bn128_Fq2::zero())
-            return libff::alt_bn128_G2::zero();
-        libff::alt_bn128_G2 p(x, y, libff::alt_bn128_Fq2::one());
-        //if (!p.is_well_formed())
-          //  BOOST_THROW_EXCEPTION(InvalidEncoding());
-        return p;
-    }
-
-*/
-} 
+    //std::pair<int32_t, bool>  alt_bn128_pair(bytes _g1_pairs, bytes _g2_pairs) {}
+}
 }
