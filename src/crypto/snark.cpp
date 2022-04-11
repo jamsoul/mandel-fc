@@ -129,7 +129,7 @@ namespace fc { namespace snark {
         std::memcpy(&out[0], y.data, 32);
         std::memcpy(&out[32], x.data, 32);
 
-//        std::reverse(out.begin(), out.end());
+        std::reverse(out.begin(), out.end());
         return out;
     }
 
