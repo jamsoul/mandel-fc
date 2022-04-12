@@ -6,6 +6,7 @@
 #include <libff/algebra/curves/alt_bn128/alt_bn128_pp.hpp>
 #include <libff/common/profiling.hpp>
 #include <boost/throw_exception.hpp>
+#include <algorithm>
 
 namespace fc { namespace snark {
 
@@ -36,26 +37,31 @@ namespace fc { namespace snark {
 
     std::pair<int32_t, libff::alt_bn128_G1> decode_g1_element(bytes bytes64_be) noexcept {
         assert(bytes64_be.size() == 64);
-
+    
         bytes sub1(bytes64_be.begin(), bytes64_be.begin()+32);
         bytes sub2(bytes64_be.begin()+32, bytes64_be.begin()+64);
 
         Scalar x{to_scalar(sub1)};
         if (!valid_element_of_fp(x)) {
+            printf("x is not a valid element of fp\n");
             return std::make_pair(1, libff::alt_bn128_G1::zero());
         }
 
         Scalar y{to_scalar(sub2)};
         if (!valid_element_of_fp(y)) {
+            printf("y is not a valid element of fp\n");
             return std::make_pair(1, libff::alt_bn128_G1::zero());
         }
 
         if (x.is_zero() && y.is_zero()) {
+            printf("x && y == 0\n");
             return std::make_pair(1, libff::alt_bn128_G1::zero());
         }
 
         libff::alt_bn128_G1 point{x, y, libff::alt_bn128_Fq::one()};
         if (!point.is_well_formed()) {
+            printf("G1 is not well formed\n");
+
             return std::make_pair(1, libff::alt_bn128_G1::zero());
         }
         return std::make_pair(0, point);
@@ -141,12 +147,14 @@ namespace fc { namespace snark {
         auto x = snark::decode_g1_element(_op1);
 
         if (x.first) {
+            printf("Error decoding g1 op1");
             return std::make_pair(1, buffer);
         }
 
         auto y = snark::decode_g1_element(_op2);
 
         if (y.first) {
+            printf("Error decoding g1 op2");
             return std::make_pair(1, buffer);
         }
 
@@ -173,6 +181,47 @@ namespace fc { namespace snark {
         return std::make_pair(0, retEncoded);
     }
     
-    //std::pair<int32_t, bool>  alt_bn128_pair(bytes _g1_pairs, bytes _g2_pairs) {}
+    static constexpr size_t kSnarkvStride{192};
+
+    std::pair<int32_t, bool>  alt_bn128_pair(bytes _g1_g2_pairs) {
+        if (_g1_g2_pairs.size() % kSnarkvStride != 0) {
+            return std::make_pair(true, false);
+        }
+
+        size_t k{_g1_g2_pairs.size() / kSnarkvStride};
+
+        snark::initLibSnark();
+        using namespace libff;
+
+        static const auto one{alt_bn128_Fq12::one()};
+        auto accumulator{one};
+
+        for (size_t i{0}; i < k; ++i) {
+            auto offset = i * kSnarkvStride;
+            bytes sub1(_g1_g2_pairs.begin()+offset, _g1_g2_pairs.begin()+offset+64);        
+            auto a = snark::decode_g1_element(sub1);
+            if (a.first) {
+                return std::make_pair(true, false);
+            }
+            bytes sub2(_g1_g2_pairs.begin()+offset+64, _g1_g2_pairs.begin()+offset+64+128);        
+            auto b = snark::decode_g2_element(sub2);
+            if (b.first) {
+                return std::make_pair(true, false);
+            }
+
+            if (a.second.is_zero() || b.second.is_zero()) {
+                continue;
+            }
+
+            accumulator = accumulator * alt_bn128_miller_loop(alt_bn128_precompute_G1(a.second), alt_bn128_precompute_G2(b.second));
+        }
+
+        bool pair_result = false;
+        if (alt_bn128_final_exponentiation(accumulator) == one) {
+            pair_result = true;
+        }
+               
+        return std::make_pair(0, pair_result);
+    }
 }
 }
