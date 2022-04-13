@@ -16,6 +16,7 @@ namespace fc { namespace snark {
     std::pair<int32_t, bytes> alt_bn128_add(bytes _op1, bytes _op2); 
     std::pair<int32_t, bytes> alt_bn128_mul(bytes _g1_point, bytes _scalar);
     std::pair<int32_t, bool>  alt_bn128_pair(bytes _g1_g2_pairs);
+    std::pair<int32_t, bytes> modexp(uint32_t _len_base, uint32_t _len_exp, uint32_t _len_modulus, bytes _base, bytes _exponent, bytes _modulus);
 
     namespace error_codes {
         enum alt_bn128 : int32_t {

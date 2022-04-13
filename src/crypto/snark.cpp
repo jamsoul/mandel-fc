@@ -223,5 +223,57 @@ namespace fc { namespace snark {
                
         return std::make_pair(0, pair_result);
     }
+
+    std::pair<int32_t, bytes> modexp(uint32_t _len_base, uint32_t _len_exp, uint32_t _len_modulus, bytes _base, bytes _exponent, bytes _modulus) 
+    {
+        auto output = bytes(_len_modulus, '\0');
+
+        if (_len_modulus == 0) {
+            return std::make_pair(1, output);
+        }
+
+        mpz_t base;
+        mpz_init(base);
+        if (_len_base) {
+            auto basePtr = static_cast<void*>(_base.data());
+            mpz_import(base, _len_base, 1, 1, 0, 0, basePtr);
+        }
+
+        mpz_t exponent;
+        mpz_init(exponent);
+        if (_len_exp) {
+            auto expPtr = static_cast<void*>(_exponent.data());
+            mpz_import(exponent, _len_exp, 1, 1, 0, 0, expPtr);
+        }
+
+        mpz_t modulus;
+        mpz_init(modulus);
+        auto modPtr = static_cast<void*>(_modulus.data());
+        mpz_import(modulus, _len_modulus, 1, 1, 0, 0, modPtr);
+
+        if (mpz_sgn(modulus) == 0) {
+            mpz_clear(modulus);
+            mpz_clear(exponent);
+            mpz_clear(base);
+
+            return std::make_pair(0, output);
+        }
+
+        mpz_t result;
+        mpz_init(result);
+
+        mpz_powm(result, base, exponent, modulus);
+        // export as little-endian
+        mpz_export(static_cast<void*>(output.data()), nullptr, -1, 1, 0, 0, result);
+        // and convert to big-endian
+        std::reverse(output.begin(), output.end());
+
+        mpz_clear(result);
+        mpz_clear(modulus);
+        mpz_clear(exponent);
+        mpz_clear(base);
+
+        return std::make_pair(0, output);
+    }
 }
 }
