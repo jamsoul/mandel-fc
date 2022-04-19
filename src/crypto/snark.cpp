@@ -43,25 +43,20 @@ namespace fc { namespace snark {
 
         Scalar x{to_scalar(sub1)};
         if (!valid_element_of_fp(x)) {
-            printf("x is not a valid element of fp\n");
             return std::make_pair(1, libff::alt_bn128_G1::zero());
         }
 
         Scalar y{to_scalar(sub2)};
         if (!valid_element_of_fp(y)) {
-            printf("y is not a valid element of fp\n");
             return std::make_pair(1, libff::alt_bn128_G1::zero());
         }
 
         if (x.is_zero() && y.is_zero()) {
-            printf("x && y == 0\n");
             return std::make_pair(1, libff::alt_bn128_G1::zero());
         }
 
         libff::alt_bn128_G1 point{x, y, libff::alt_bn128_Fq::one()};
         if (!point.is_well_formed()) {
-            printf("G1 is not well formed\n");
-
             return std::make_pair(1, libff::alt_bn128_G1::zero());
         }
         return std::make_pair(0, point);
@@ -128,10 +123,6 @@ namespace fc { namespace snark {
         auto x{p.X.as_bigint()};
         auto y{p.Y.as_bigint()};
 
-//        // Here we convert little-endian data to big-endian output
-//        static_assert(SILKWORM_BYTE_ORDER == SILKWORM_LITTLE_ENDIAN);
-//        static_assert(sizeof(x.data) == 32);
-
         std::memcpy(&out[0], y.data, 32);
         std::memcpy(&out[32], x.data, 32);
 
@@ -147,14 +138,12 @@ namespace fc { namespace snark {
         auto x = snark::decode_g1_element(_op1);
 
         if (x.first) {
-            printf("Error decoding g1 op1");
             return std::make_pair(1, buffer);
         }
 
         auto y = snark::decode_g1_element(_op2);
 
         if (y.first) {
-            printf("Error decoding g1 op2");
             return std::make_pair(1, buffer);
         }
 
