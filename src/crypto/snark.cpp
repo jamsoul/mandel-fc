@@ -43,23 +43,23 @@ namespace fc { namespace snark {
 
         Scalar x{to_scalar(sub1)};
         if (!valid_element_of_fp(x)) {
-            return std::make_pair(1, libff::alt_bn128_G1::zero());
+            return std::make_pair(error_codes::operand_component_invalid, libff::alt_bn128_G1::zero());
         }
 
         Scalar y{to_scalar(sub2)};
         if (!valid_element_of_fp(y)) {
-            return std::make_pair(1, libff::alt_bn128_G1::zero());
+            return std::make_pair(error_codes::operand_component_invalid, libff::alt_bn128_G1::zero());
         }
 
         if (x.is_zero() && y.is_zero()) {
-            return std::make_pair(1, libff::alt_bn128_G1::zero());
+            return std::make_pair(error_codes::operand_at_origin, libff::alt_bn128_G1::zero());
         }
 
         libff::alt_bn128_G1 point{x, y, libff::alt_bn128_Fq::one()};
         if (!point.is_well_formed()) {
-            return std::make_pair(1, libff::alt_bn128_G1::zero());
+            return std::make_pair(error_codes::operand_not_in_curve, libff::alt_bn128_G1::zero());
         }
-        return std::make_pair(0, point);
+        return std::make_pair(error_codes::none, point);
     }
 
     std::pair<int32_t, libff::alt_bn128_Fq2> decode_fp2_element(bytes bytes64_be) noexcept {
@@ -73,10 +73,10 @@ namespace fc { namespace snark {
         Scalar c1{to_scalar(sub2)};
 
         if (!valid_element_of_fp(c0) || !valid_element_of_fp(c1)) {
-            return {};
+            return std::make_pair(error_codes::operand_component_invalid, libff::alt_bn128_Fq2::one() );
         }
 
-        return std::make_pair(0, libff::alt_bn128_Fq2{c0, c1});
+        return std::make_pair(error_codes::none, libff::alt_bn128_Fq2{c0, c1});
     }
 
     std::pair<int32_t, libff::alt_bn128_G2> decode_g2_element(bytes bytes128_be) noexcept {
@@ -85,31 +85,31 @@ namespace fc { namespace snark {
         bytes sub1(bytes128_be.begin(), bytes128_be.begin()+64);        
         auto x = decode_fp2_element(sub1);
         if (x.first) {
-            return std::make_pair(1, libff::alt_bn128_G2::zero());
+            return std::make_pair(x.first, libff::alt_bn128_G2::zero());
         }
 
         bytes sub2(bytes128_be.begin()+64, bytes128_be.begin()+128);        
         auto y = decode_fp2_element(sub2);
         
         if (y.first) {
-            return std::make_pair(1, libff::alt_bn128_G2::zero());
+            return std::make_pair(y.first, libff::alt_bn128_G2::zero());
         }
 
         if (x.second.is_zero() && y.second.is_zero()) {
-            return std::make_pair(0, libff::alt_bn128_G2::zero());
+            return std::make_pair(error_codes::operand_at_origin, libff::alt_bn128_G2::zero());
         }
 
         libff::alt_bn128_G2 point{x.second, y.second, libff::alt_bn128_Fq2::one()};
         if (!point.is_well_formed()) {
-            return std::make_pair(1, libff::alt_bn128_G2::zero());;
+            return std::make_pair(error_codes::operand_not_in_curve, libff::alt_bn128_G2::zero());;
         }
 
         if (!(libff::alt_bn128_G2::order() * point).is_zero()) {
             // wrong order, doesn't belong to the subgroup G2
-            return std::make_pair(1, libff::alt_bn128_G2::zero());;
+            return std::make_pair(error_codes::operand_outside_g2, libff::alt_bn128_G2::zero());;
         }
 
-        return std::make_pair(0, point);
+        return std::make_pair(error_codes::none, point);
     }
 
     bytes encode_g1_element(libff::alt_bn128_G1 p) noexcept {
@@ -137,19 +137,19 @@ namespace fc { namespace snark {
 
         auto x = snark::decode_g1_element(_op1);
 
-        if (x.first) {
-            return std::make_pair(1, buffer);
+        if (x.first != error_codes::none) {
+            return std::make_pair(x.first, buffer);
         }
 
         auto y = snark::decode_g1_element(_op2);
 
-        if (y.first) {
-            return std::make_pair(1, buffer);
+        if (y.first != error_codes::none) {
+            return std::make_pair(y.first, buffer);
         }
 
         libff::alt_bn128_G1 g1Sum = x.second + y.second;
         auto retEncoded = snark::encode_g1_element(g1Sum);
-        return std::make_pair(0, retEncoded);
+        return std::make_pair(error_codes::none, retEncoded);
     }
 
     std::pair<int32_t, bytes> alt_bn128_mul(bytes _g1_point, bytes _scalar) {
@@ -160,7 +160,7 @@ namespace fc { namespace snark {
         auto x = snark::decode_g1_element(_g1_point);
 
         if (x.first) {
-            return std::make_pair(1, buffer);
+            return std::make_pair(x.first, buffer);
         }
 
         snark::Scalar n{snark::to_scalar(_scalar)};
@@ -174,7 +174,7 @@ namespace fc { namespace snark {
 
     std::pair<int32_t, bool>  alt_bn128_pair(bytes _g1_g2_pairs) {
         if (_g1_g2_pairs.size() % kSnarkvStride != 0) {
-            return std::make_pair(true, false);
+            return std::make_pair(error_codes::pairing_list_size_error, false);
         }
 
         size_t k{_g1_g2_pairs.size() / kSnarkvStride};
@@ -190,12 +190,12 @@ namespace fc { namespace snark {
             bytes sub1(_g1_g2_pairs.begin()+offset, _g1_g2_pairs.begin()+offset+64);        
             auto a = snark::decode_g1_element(sub1);
             if (a.first) {
-                return std::make_pair(true, false);
+                return std::make_pair(a.first, false);
             }
             bytes sub2(_g1_g2_pairs.begin()+offset+64, _g1_g2_pairs.begin()+offset+64+128);        
             auto b = snark::decode_g2_element(sub2);
             if (b.first) {
-                return std::make_pair(true, false);
+                return std::make_pair(b.first, false);
             }
 
             if (a.second.is_zero() || b.second.is_zero()) {
@@ -218,7 +218,7 @@ namespace fc { namespace snark {
         auto output = bytes(_len_modulus, '\0');
 
         if (_len_modulus == 0) {
-            return std::make_pair(1, output);
+            return std::make_pair(error_codes::modulus_len_zero, output);
         }
 
         mpz_t base;
@@ -245,7 +245,7 @@ namespace fc { namespace snark {
             mpz_clear(exponent);
             mpz_clear(base);
 
-            return std::make_pair(0, output);
+            return std::make_pair(error_codes::none, output);
         }
 
         mpz_t result;
@@ -262,7 +262,7 @@ namespace fc { namespace snark {
         mpz_clear(exponent);
         mpz_clear(base);
 
-        return std::make_pair(0, output);
+        return std::make_pair(error_codes::none, output);
     }
 }
 }

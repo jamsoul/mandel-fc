@@ -18,16 +18,15 @@ namespace fc { namespace snark {
     std::pair<int32_t, bool>  alt_bn128_pair(bytes _g1_g2_pairs);
     std::pair<int32_t, bytes> modexp(uint32_t _len_base, uint32_t _len_exp, uint32_t _len_modulus, bytes _base, bytes _exponent, bytes _modulus);
 
-    namespace error_codes {
-        enum alt_bn128 : int32_t {
-            undefined = -1, ///< undefined error
-            none = 0, ///< succeed
-            operand_size_error,
-            invalid_signature_format,
-            unactivated_key_type, 
-            invalid_signature_data, 
-            insufficient_output_buffer
-        };
-    }
+    enum error_codes : int32_t {
+        undefined = -1, ///< undefined error
+        none = 0, ///< succeed
+        operand_component_invalid,
+        operand_at_origin,
+        operand_not_in_curve,
+        pairing_list_size_error,
+        operand_outside_g2,
+        modulus_len_zero
+    };
 } // snark
 } // fc
