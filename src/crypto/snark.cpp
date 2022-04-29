@@ -266,30 +266,29 @@ namespace fc { namespace snark {
         return std::make_pair(error_codes::none, output);
     }
 
-    std::pair<int32_t, bytes> blake2f(uint32_t _rounds, bytes _h, bytes _m, bytes _t0_offset, bytes _t1_offset, const char _f) {
+    std::pair<int32_t, bytes> blake2f(uint32_t _rounds, bytes _h, bytes _m, bytes _t0_offset, bytes _t1_offset, bool _f) {
         bytes out(64, 0);
 
-        uint8_t f{_f};
-        if (f != 0 && f != 1) {
-            return std::make_pair(error_codes::undefined, out);
-        }
-
         blake2b_state state{};
-        if (f) {
+        state.f[0] = 0;
+        state.f[1] = 0;
+        
+        if (_f) {
             state.f[0] = std::numeric_limits<uint64_t>::max();
         }
 
-        static_assert(sizeof(state.h) == 8 * 8);
-        std::memcpy(&state.h, static_cast<void*>(_h.data()), 8 * 8);
+        std::memcpy(state.h, static_cast<void*>(_h.data()), sizeof(uint64_t) * 8);
 
         uint8_t block[128];
-        std::memcpy(block, static_cast<void*>(_m.data()), 128);
+        std::memcpy(block, static_cast<void*>(_m.data()), sizeof(uint8_t) * 128);
 
-        std::memcpy(&state.t, static_cast<void*>(_t0_offset.data()), 8 );
-        std::memcpy(&state.t + 8, static_cast<void*>(_t1_offset.data()), 8 );
+        std::memcpy(&(state.t[0]), static_cast<void*>(_t0_offset.data()), sizeof(uint64_t));
+        std::memcpy(&(state.t[1]), static_cast<void*>(_t1_offset.data()), sizeof(uint64_t));
 
         blake2b_compress(&state, block, _rounds);
-        std::memcpy(static_cast<void*>(out.data()), static_cast<void*>(state.h), 8 * 8);
+
+        std::memcpy(static_cast<void*>(out.data()), static_cast<void*>(state.h), sizeof(uint64_t) * 8);
+
         return std::make_pair(error_codes::none, out);
     }
 }
