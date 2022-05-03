@@ -20,14 +20,15 @@ namespace fc { namespace snark {
     std::pair<int32_t, bytes> blake2f(uint32_t _rounds, bytes _h, bytes _m, bytes _t0_offset, bytes _t1_offset, bool _f);
 
     enum error_codes : int32_t {
-        undefined = -1, ///< undefined error
-        none = 0, ///< succeed
+        undefined = -1,                 ///< undefined error
+        none = 0,                       ///< succeed
         operand_component_invalid,
         operand_at_origin,
         operand_not_in_curve,
         pairing_list_size_error,
         operand_outside_g2,
-        modulus_len_zero
+        modulus_len_zero,
+        input_len_error
     };
 } // snark
 } // fc

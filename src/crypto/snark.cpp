@@ -267,27 +267,32 @@ namespace fc { namespace snark {
     }
 
     std::pair<int32_t, bytes> blake2f(uint32_t _rounds, bytes _h, bytes _m, bytes _t0_offset, bytes _t1_offset, bool _f) {
-        bytes out(64, 0);
-
         blake2b_state state{};
-        state.f[0] = 0;
-        state.f[1] = 0;
-        
-        if (_f) {
-            state.f[0] = std::numeric_limits<uint64_t>::max();
-        }
+        bytes out(sizeof(state.h), 0);
 
-        std::memcpy(state.h, static_cast<void*>(_h.data()), sizeof(uint64_t) * 8);
+        //  EIP-152 [4 bytes for rounds][64 bytes for h][128 bytes for m][8 bytes for t_0][8 bytes for t_1][1 byte for f] : 213
+        //          [------------------][64 bytes for h][128 bytes for m][8 bytes for t_0][8 bytes for t_1][------------] : 208
+        //  * rounds and final indicator flag are not serialized
+        if (_h.size() + _m.size() + _t0_offset.size() + _t1_offset.size() != 208 ) {
+            return std::make_pair(error_codes::input_len_error, out);
+        }
+   
+        memset(&state, 0, sizeof(blake2b_state));
+
+        memcpy(state.h, _h.data(), 64);
+
+        // final indicator flag set words to 1's if true
+        state.f[0] = _f?std::numeric_limits<uint64_t>::max():0;
+
+        memcpy(&state.t[0], _t0_offset.data(), 8);
+        memcpy(&state.t[1], _t1_offset.data(), 8);
 
         uint8_t block[128];
-        std::memcpy(block, static_cast<void*>(_m.data()), sizeof(uint8_t) * 128);
-
-        std::memcpy(&(state.t[0]), static_cast<void*>(_t0_offset.data()), sizeof(uint64_t));
-        std::memcpy(&(state.t[1]), static_cast<void*>(_t1_offset.data()), sizeof(uint64_t));
-
+        memcpy(block, _m.data(), 128);
+        
         blake2b_compress(&state, block, _rounds);
 
-        std::memcpy(static_cast<void*>(out.data()), static_cast<void*>(state.h), sizeof(uint64_t) * 8);
+        std::memcpy(&out[0], &state.h[0], out.size());
 
         return std::make_pair(error_codes::none, out);
     }
