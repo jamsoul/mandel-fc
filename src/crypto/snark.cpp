@@ -7,7 +7,7 @@
 #include <libff/common/profiling.hpp>
 #include <boost/throw_exception.hpp>
 #include <algorithm>
-#include "blake2.h"
+#include "blake2.hpp"
 
 namespace fc { namespace snark {
 
@@ -266,8 +266,9 @@ namespace fc { namespace snark {
         return std::make_pair(error_codes::none, output);
     }
 
-    std::pair<int32_t, bytes> blake2f(uint32_t _rounds, bytes _h, bytes _m, bytes _t0_offset, bytes _t1_offset, bool _f) {
-        blake2b_state state{};
+    std::pair<int32_t, bytes> blake2f(uint32_t _rounds, bytes _h, bytes _m, bytes _t0_offset, bytes _t1_offset, bool _f, const std::function<bool(int)> &callBackFun) {
+        Blake2bWrapper b2wrapper;
+        Blake2bWrapper::blake2b_state state{};
         bytes out(sizeof(state.h), 0);
 
         //  EIP-152 [4 bytes for rounds][64 bytes for h][128 bytes for m][8 bytes for t_0][8 bytes for t_1][1 byte for f] : 213
@@ -277,7 +278,7 @@ namespace fc { namespace snark {
             return std::make_pair(error_codes::input_len_error, out);
         }
    
-        memset(&state, 0, sizeof(blake2b_state));
+        memset(&state, 0, sizeof(Blake2bWrapper::blake2b_state));
 
         memcpy(state.h, _h.data(), 64);
 
@@ -290,7 +291,7 @@ namespace fc { namespace snark {
         uint8_t block[128];
         memcpy(block, _m.data(), 128);
         
-        blake2b_compress(&state, block, _rounds);
+        b2wrapper.blake2b_compress(&state, block, _rounds, callBackFun);
 
         std::memcpy(&out[0], &state.h[0], out.size());
 

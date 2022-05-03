@@ -105,7 +105,7 @@ set( fc_sources
      src/crypto/private_key.cpp
      src/crypto/signature.cpp
      src/crypto/snark.cpp
-     src/crypto/blake2b.c
+     src/crypto/blake2b.cpp
      src/network/ip.cpp
      src/network/platform_root_ca.cpp
      src/network/resolve.cpp

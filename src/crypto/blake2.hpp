@@ -13,29 +13,33 @@
    https://blake2.net.
 */
 
-#ifndef SILKWORM_CRYPTO_BLAKE2_H_
-#define SILKWORM_CRYPTO_BLAKE2_H_
+#pragma once
 
 #include <stddef.h>
 #include <stdint.h>
+#include <functional>
 
-#if defined(__cplusplus)
-extern "C" {
-#endif
+namespace fc {
 
-enum blake2b_constant { BLAKE2B_BLOCKBYTES = 128 };
+class Blake2bWrapper {
+public:
+    enum blake2b_constant { BLAKE2B_BLOCKBYTES = 128 };
 
-typedef struct blake2b_state__ {
-    uint64_t h[8];
-    uint64_t t[2];
-    uint64_t f[2];
-} blake2b_state;
+    typedef struct blake2b_state__ {
+        uint64_t h[8];
+        uint64_t t[2];
+        uint64_t f[2];
+    } blake2b_state;
 
-// https://tools.ietf.org/html/rfc7693#section-3.2
-void blake2b_compress(blake2b_state *S, const uint8_t block[BLAKE2B_BLOCKBYTES], size_t r);
+    void blake2b_compress(blake2b_state *S, const uint8_t block[BLAKE2B_BLOCKBYTES], size_t r, const std::function<bool(int)> &callBackFun );
+   
+private:
+    uint64_t m[16];
+    uint64_t v[16];
+    size_t i;
 
-#if defined(__cplusplus)
+    void blake2b_compress_init(blake2b_state *S, const uint8_t block[BLAKE2B_BLOCKBYTES], size_t r);
+    void blake2b_compress_end(blake2b_state *S);
+};
+
 }
-#endif
-
-#endif  // SILKWORM_CRYPTO_BLAKE2_H_

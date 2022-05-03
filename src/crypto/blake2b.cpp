@@ -16,7 +16,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "blake2.h"
+#include "blake2.hpp"
 
 static const uint64_t blake2b_IV[8] = {0x6a09e667f3bcc908ULL, 0xbb67ae8584caa73bULL, 0x3c6ef372fe94f82bULL,
                                        0xa54ff53a5f1d36f1ULL, 0x510e527fade682d1ULL, 0x9b05688c2b3e6c1fULL,
@@ -62,11 +62,22 @@ static inline uint64_t rotr64(const uint64_t w, const unsigned c) { return (w >>
         G(r, 7, v[3], v[4], v[9], v[14]);  \
     } while (0)
 
-void blake2b_compress(blake2b_state *S, const uint8_t block[BLAKE2B_BLOCKBYTES], size_t r) {
-    uint64_t m[16];
-    uint64_t v[16];
-    size_t i;
+namespace fc {
 
+void Blake2bWrapper::blake2b_compress(blake2b_state *S, const uint8_t block[BLAKE2B_BLOCKBYTES], size_t r, const std::function<bool(int)> &callBackFun) {
+    blake2b_compress_init(S, block, r);
+
+    for (i = 0; i < r; ++i) {
+        ROUND(i % 10);
+        if (callBackFun(i)) {
+            break;
+        }
+    }
+
+    blake2b_compress_end(S);
+}
+
+void Blake2bWrapper::blake2b_compress_init(blake2b_state *S, const uint8_t block[BLAKE2B_BLOCKBYTES], size_t r) {
     for (i = 0; i < 16; ++i) {
         m[i] = load64(block + i * sizeof(m[i]));
     }
@@ -83,15 +94,13 @@ void blake2b_compress(blake2b_state *S, const uint8_t block[BLAKE2B_BLOCKBYTES],
     v[13] = blake2b_IV[5] ^ S->t[1];
     v[14] = blake2b_IV[6] ^ S->f[0];
     v[15] = blake2b_IV[7] ^ S->f[1];
+}
 
-    for (i = 0; i < r; ++i) {
-        ROUND(i % 10);
-    }
-
+void Blake2bWrapper::blake2b_compress_end(blake2b_state *S) {
     for (i = 0; i < 8; ++i) {
         S->h[i] = S->h[i] ^ v[i] ^ v[i + 8];
     }
 }
-
+}
 #undef G
 #undef ROUND
