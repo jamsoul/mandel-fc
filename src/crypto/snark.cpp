@@ -297,5 +297,10 @@ namespace fc { namespace snark {
 
         return std::make_pair(error_codes::none, out);
     }
+
+    std::pair<int32_t, bytes> keccak256(bytes _input) {
+        return std::make_pair(error_codes::none, _input);
+    }
+
 }
 }
